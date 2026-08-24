@@ -1,0 +1,57 @@
+# Copy this file to <run-dir>/config.yaml and edit values for each experiment.
+run_id: 1
+seed: 42
+session_idx: 18
+device: cuda
+paths:
+  data: data_new.mat
+  logs: lightning_logs
+  results: results
+training:
+  batch_size: 124
+  max_epoch: 500
+  min_delta: 0.0001
+  patience: 10
+  n_seeds: 10
+model_type:
+  name: mean
+  mean:
+    n_hidden: 16
+    n_heads: 2
+    n_layers: 1
+    nonlinearity: gelu
+    dropout: 0
+  cov:
+    n_latent: 32
+    n_hidden: 2
+    n_heads: 1
+    n_layers: 1
+    nonlinearity: gelu
+    dropout: 0
+optimization:
+  optimizer_type:
+    name: Adam
+    Adam:
+      lr: 0.01
+      weight_decay: 0
+    AdamW:
+      lr: 0.01
+      weight_decay: 0
+  scheduler_type:
+    name: Reduce
+    Reduce:
+      factor: 0.5
+      patience: 5
+      min_lr: 1.0e-10
+    Cosine:
+      T_mult: 1
+      eta_min: 1.0e-5
+      last_epoch: -1
+data_preparation:
+  spike_scale: 0.2
+  dense_indices: [0, 1, 2, 3]
+  sparse_indices: [4, 5, 6]
+  log_task_var_names: [tunp, tslp]
+  max_log_task_value: 100
+  unit_names_to_remove: [23, 52, 61, 105, 106, 116, 118, 133, 139, 149, 150, 165, 166]
+  train_fraction: 0.8

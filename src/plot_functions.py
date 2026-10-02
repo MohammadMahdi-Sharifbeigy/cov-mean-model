@@ -2430,16 +2430,10 @@ def plot_model_metrics_comparison(
     fig.suptitle(title, fontweight="bold", fontsize=13, y=1.05)
 
     for idx, (metric_name, x_train, x_valid, y_train, y_valid) in enumerate(metrics):
-        x_train = np.asarray(x_train, dtype=float)
-        x_valid = np.asarray(x_valid, dtype=float)
-        y_train = np.asarray(y_train, dtype=float)
-        y_valid = np.asarray(y_valid, dtype=float)
-
-        finite_train = np.isfinite(x_train) & np.isfinite(y_train)
-        finite_valid = np.isfinite(x_valid) & np.isfinite(y_valid)
-
-        x_train, y_train = x_train[finite_train], y_train[finite_train]
-        x_valid, y_valid = x_valid[finite_valid], y_valid[finite_valid]
+        x_train = np.nan_to_num(np.asarray(x_train, dtype=float), nan=0.0)
+        x_valid = np.nan_to_num(np.asarray(x_valid, dtype=float), nan=0.0)
+        y_train = np.nan_to_num(np.asarray(y_train, dtype=float), nan=0.0)
+        y_valid = np.nan_to_num(np.asarray(y_valid, dtype=float), nan=0.0)
 
         lower = min(x_train.min(), x_valid.min(), y_train.min(), y_valid.min())
         upper = max(x_train.max(), x_valid.max(), y_train.max(), y_valid.max())
@@ -2508,12 +2502,12 @@ def plot_model_metric_improvement(
     better_mse, better_corr, better_r2 = [], [], []
 
     for unit_idx in range(n_units):
-        mse_b = mse_trial_baseline[unit_idx]
-        mse_m = mse_trial_model[unit_idx]
-        corr_b = corr_trial_baseline[unit_idx]
-        corr_m = corr_trial_model[unit_idx]
-        r2_b = r2_trial_baseline[unit_idx]
-        r2_m = r2_trial_model[unit_idx]
+        mse_b = np.asarray(mse_trial_baseline[unit_idx], dtype=float)
+        mse_m = np.asarray(mse_trial_model[unit_idx], dtype=float)
+        corr_b = np.nan_to_num(np.asarray(corr_trial_baseline[unit_idx], dtype=float), nan=0.0)
+        corr_m = np.nan_to_num(np.asarray(corr_trial_model[unit_idx], dtype=float), nan=0.0)
+        r2_b = np.nan_to_num(np.asarray(r2_trial_baseline[unit_idx], dtype=float), nan=0.0)
+        r2_m = np.nan_to_num(np.asarray(r2_trial_model[unit_idx], dtype=float), nan=0.0)
 
         try:
             _, p_corr = wilcoxon(corr_b, corr_m)

@@ -340,6 +340,9 @@ def generate_step5_shared_noise(prep, lambda_hat, cov_type='global', n_blocks=4,
     new_lambda = np.clip(new_lambda, 1e-8, 1000.0)
     
     synth = rng.poisson(lam=new_lambda).astype(float)
+    
+    if kwargs.get('return_noise', False):
+        return synth * prep.get('spike_scale', 1.0), synth_noise
     return synth * prep.get('spike_scale', 1.0)
 
 # =========================================================================

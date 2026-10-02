@@ -42,31 +42,42 @@ Latent loadings are initialized near zero so the model starts close to an identi
 
 ---
 
-## Synthetic Data Verification
+## Synthetic Data Verification (src/synthethic.py)
 
-To systematically validate our model's capacity to identify true underlying generative structures, we execute a rigorous synthetic data validation pipeline. The synthetic simulations verify that both the mean model (via SHAP attribution) and the latent covariance model can successfully isolate known ground-truth mechanisms injected into the data.
+To systematically validate our model's capacity to identify true underlying generative structures, we execute a rigorous synthetic data validation pipeline. The entire pipeline of ground-truth testing (Steps 1 through 7) is procedurally generated using dedicated functions in `src/synthethic.py`. 
 
-### Step 6: Mean Model Validation with Ground-Truth Effects
-In this step, we synthesize spike data by retaining the complex empirical residual covariance structure but replacing the conditional mean with a strictly controlled, additive ground-truth GLM. 
+The synthetic simulations verify that both the mean model (via SHAP attribution) and the latent covariance model can successfully isolate known mechanisms injected into the data. The steps are categorized as follows:
+- **Baseline Validations (Steps 1 & 2):** Simple Poisson and binwise Poisson noise generation to verify basic model convergence.
+- **Mean Model Validation (Steps 3, 4, 5):** We inject perfectly known additive GLM effects for specific task variables (like reward or time-since-last-press) and incrementally introduce complex noise (random latent bias, shared noise). We then use SHAP to ensure the model perfectly recovers the ground-truth coefficients without hallucinating spurious dependencies.
+- **Covariance Model Validation (Steps 6 & 7):** We test the model's ability to recover complex latent structures.
 
-By running our full Mean-Covariance model and subsequent SHAP attribution pipeline on this synthetic data, we can directly compare the recovered variable selectivities (e.g., reward or time-since-last-press) against the known injected GLM coefficients. This confirms that the nonlinear Transformer mean-model and our SHAP permutation framework accurately isolate true task-variable dependencies without confounding them with the highly structured residual noise.
+### Step 6: Empirical Covariance Injection (generate_step6_data)
+In Step 6, we stress-test both the mean and covariance components by generating data with a known mean but fully realistic, complex noise. Specifically, `generate_step6_data` takes the strictly controlled GLM mean trajectory $\hat{\lambda}$ generated in Step 3, and adds the raw, unstructured empirical residuals extracted from fitting the baseline model to real data.
+
+By running our full Mean-Covariance model on this synthetic data, we confirm that the nonlinear Transformer mean-model and our SHAP permutation framework accurately isolate the true task-variable dependencies, while the covariance model simultaneously adapts to reconstruct the highly structured empirical noise.
 
 <p align="center">
   <img src="assets/step6.png" alt="Step 6 Synthetic Covariance Recovery" width="800">
 </p>
 
-**FIGURE 2.** *Fitted shared covariance-model parameters extracted from Step 6 synthetic data.*
+**FIGURE 2.** *Fitted shared covariance-model parameters extracted from Step 6 synthetic data, where the model successfully isolates the known GLM mean from the injected empirical covariance structure.*
 
-### Step 7: Covariance Model Validation with Ground-Truth Structure
-In this step, we focus on the latent covariance architecture. We generate synthetic spikes using the empirical mean but replacing the residuals with a perfectly known, low-rank Kronecker-structured covariance matrix (a tensor product of independent spatial/unit and temporal/bin covariance matrices).
+### Step 7: Kronecker Structure Recovery (generate_step7_kronecker_poisson)
+In Step 7, we focus strictly on validating the latent covariance architecture. `generate_step7_kronecker_poisson` generates synthetic spikes using the empirical mean, but replaces the residuals with a perfectly known, low-rank Kronecker-structured covariance matrix (a tensor product of independent spatial/unit loadings and temporal/bin Gaussian process kernels).
 
-We then fit our shared latent covariance model to this synthetic data. The objective is to verify that the model correctly converges to the underlying Kronecker structure, capturing the true latent length scales and temporal loadings without overfitting or hallucinating spurious correlations.
+We then fit our shared latent covariance model to this synthetic data. The objective is to verify that the model correctly converges to the underlying Kronecker structure, capturing the true latent length scales and temporal loadings without overfitting.
+
+<p align="center">
+  <img src="assets/step7_cov.png" alt="Step 7 Ground Truth vs Predicted Covariance" width="800">
+</p>
+
+**FIGURE 3.** *Comparison of the injected ground-truth Kronecker noise covariance (Left) against the model's reconstructed covariance matrix after training (Right) for a specific time bin (Bin 13). The model accurately recovers the complex block-diagonal correlation structure injected during synthetic generation.*
 
 <p align="center">
   <img src="assets/step7.png" alt="Step 7 Synthetic Covariance Recovery" width="800">
 </p>
 
-**FIGURE 3.** *Fitted shared covariance-model parameters extracted from Step 7 synthetic data, demonstrating the model's ability to recover a known, injected Kronecker-structured ground-truth covariance.*
+**FIGURE 4.** *Fitted shared covariance-model parameters extracted from Step 7 synthetic data, demonstrating the model's ability to recover the known, injected Kronecker-structured ground-truth covariance.*
 
 ---
 

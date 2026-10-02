@@ -4,6 +4,14 @@ This project studies neural population coding in freely moving macaque dorsolate
 
 ---
 
+## Methodology Overview
+
+<p align="center">
+  <img src="assets/methodology_diagram.png" alt="Methodology Flowchart" width="800">
+</p>
+
+---
+
 ## Model
 
 The proposed framework is a **latent mean-covariance model** that jointly predicts a conditional mean firing-rate trajectory and a structured, low-rank population covariance. For a trial, the model outputs a mean vector $\mu(x)$ and a covariance factor $L$, defining a trial-wise multivariate Gaussian over the flattened bin-unit response vector $y$:

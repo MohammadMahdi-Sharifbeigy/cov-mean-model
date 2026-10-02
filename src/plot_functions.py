@@ -1354,30 +1354,60 @@ def plot_training_history(
     show=False,
 ):
 
-    h = trainer.history
-    train = np.asarray(h.train_loss_epoch)
-    valid = np.asarray(h.valid_loss_epoch)
-    lr = np.asarray(h.lr)
-    epochs = np.arange(1, len(valid) + 1)
+    h = {}
+    if hasattr(trainer, 'history'):
+        if hasattr(trainer.history, 'history'):
+            h = trainer.history.history
+        elif isinstance(trainer.history, dict):
+            h = trainer.history
+    elif hasattr(trainer, 'callbacks') and len(trainer.callbacks) > 0:
+        cb = trainer.callbacks[0]
+        if hasattr(cb, 'history') and isinstance(cb.history, dict):
+            h = cb.history
+        else:
+            h = {
+                'train_loss_epoch': getattr(cb, 'train_loss', []),
+                'valid_loss_epoch': getattr(cb, 'valid_loss', []),
+                'learning_rate': getattr(cb, 'lr', []),
+            }
 
-    trend = lambda x: np.diff(x) / np.maximum(np.abs(x[:-1]), 1e-8)
+    train = np.asarray(h.get('train_loss_epoch', h.get('train_loss', [])))
+    valid = np.asarray(h.get('valid_loss_epoch', h.get('valid_loss', [])))
+    lr = np.asarray(h.get('learning_rate', h.get('lr', [])))
+
+    if len(valid) == 0 and len(train) == 0:
+        print(f"Skipping plot '{title}': no training history found.")
+        return None
+
+    trend = lambda x: np.diff(x) / np.maximum(np.abs(x[:-1]), 1e-8) if len(x) > 1 else np.array([])
 
     fig, ax = plt.subplots(1, 3, figsize=(12, 3.5), layout="constrained")
 
-    ax[0].plot(epochs, valid, color="tab:orange", label="Validation")
-    ax[0].plot(epochs, train, color="tab:blue", label="Train")
+    # 1. Loss plot
+    if len(valid) > 0:
+        ax[0].plot(np.arange(1, len(valid) + 1), valid, color="tab:orange", label="Validation")
+    if len(train) > 0:
+        ax[0].plot(np.arange(1, len(train) + 1), train, color="tab:blue", label="Train")
     ax[0].set(title="Loss", xlabel="Epoch", ylabel="NLL loss")
-    ax[0].legend(frameon=False)
+    if len(valid) > 0 or len(train) > 0:
+        ax[0].legend(frameon=False)
 
+    # 2. Loss trend plot
     ax[1].axhline(0, color="black", ls="--", lw=1)
-    ax[1].plot(epochs[1:], trend(valid), color="tab:orange", label="Validation")
-    ax[1].plot(epochs[1:], trend(train), color="tab:blue", label="Train")
+    if len(valid) > 1:
+        ax[1].plot(np.arange(2, len(valid) + 1), trend(valid), color="tab:orange", label="Validation")
+    if len(train) > 1:
+        ax[1].plot(np.arange(2, len(train) + 1), trend(train), color="tab:blue", label="Train")
     ax[1].set(title="Loss trend", xlabel="Epoch", ylabel="Relative change")
-    ax[1].legend(frameon=False)
+    if len(valid) > 1 or len(train) > 1:
+        ax[1].legend(frameon=False)
 
-    ax[2].plot(epochs, lr, color="tab:green")
+    # 3. Learning rate plot
+    valid_lr = len(lr) > 0 and not np.all(np.isnan(lr))
+    if valid_lr:
+        ax[2].plot(np.arange(1, len(lr) + 1), lr, color="tab:green")
+        ax[2].set_yscale("log")
     ax[2].set(title="Learning rate", xlabel="Epoch", ylabel="LR")
-    ax[2].set_yscale("log")
 
     fig.text(
         -0.05,

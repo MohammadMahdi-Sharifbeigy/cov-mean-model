@@ -468,43 +468,68 @@ def compute_metrics(Conf, Y, Y_hat):
 class MetricHistory(L.Callback):
     def __init__(self):
         super().__init__()
-        self.history = {
-            'epoch': [],
-            'train_loss_epoch': [],
-            'valid_loss_epoch': [],
-            'train_correlation': [],
-            'valid_correlation': [],
-            'train_mse_epoch': [],  # <--- NEW
-            'valid_mse_epoch': [],  # <--- NEW
-            'learning_rate': [],
-        }
+        self.history = {}
 
     def on_validation_epoch_end(self, trainer, pl_module):
+        if trainer.sanity_checking or trainer.global_rank != 0:
+            return
+
         metrics = trainer.callback_metrics
 
+        if 'epoch' not in self.history:
+            self.history['epoch'] = []
         self.history['epoch'].append(int(trainer.current_epoch))
-        self.history['train_loss_epoch'].append(
-            float(metrics['train_loss_epoch'].detach().cpu()) if 'train_loss_epoch' in metrics else np.nan
-        )
-        self.history['valid_loss_epoch'].append(
-            float(metrics['valid_loss_epoch'].detach().cpu()) if 'valid_loss_epoch' in metrics else np.nan
-        )
-        self.history['train_correlation'].append(
-            float(metrics['train_correlation'].detach().cpu()) if 'train_correlation' in metrics else np.nan
-        )
-        self.history['valid_correlation'].append(
-            float(metrics['valid_correlation'].detach().cpu()) if 'valid_correlation' in metrics else np.nan
-        )
-        
-        self.history['train_mse_epoch'].append(
-            float(metrics['train_mse_epoch'].detach().cpu()) if 'train_mse_epoch' in metrics else np.nan
-        )
-        self.history['valid_mse_epoch'].append(
-            float(metrics['valid_mse_epoch'].detach().cpu()) if 'valid_mse_epoch' in metrics else np.nan
-        )
 
-        lr = trainer.optimizers[0].param_groups[0]['lr'] if len(trainer.optimizers) > 0 else np.nan
+        # Safely extract learning rate
+        lr = float('nan')
+        if trainer.optimizers and len(trainer.optimizers[0].param_groups) > 0:
+            lr = trainer.optimizers[0].param_groups[0].get('lr', float('nan'))
+            
+        if 'learning_rate' not in self.history:
+            self.history['learning_rate'] = []
         self.history['learning_rate'].append(float(lr))
+
+        current_len = len(self.history['epoch'])
+
+        # Store current metrics safely
+        for k, v in metrics.items():
+            try:
+                if hasattr(v, 'detach'):
+                    val = float(v.detach().cpu().item())
+                elif hasattr(v, 'item'):
+                    val = float(v.item())
+                else:
+                    val = float(v)
+            except Exception:
+                continue
+
+            if k not in self.history:
+                self.history[k] = [float('nan')] * (current_len - 1)
+            self.history[k].append(val)
+
+        # Pad any metrics that were not logged in the current epoch
+        for k, lst in self.history.items():
+            if k not in ['epoch', 'learning_rate']:
+                while len(lst) < current_len:
+                    lst.append(float('nan'))
+
+    def state_dict(self):
+        return {'history': self.history}
+
+    def load_state_dict(self, state_dict):
+        self.history = state_dict.get('history', {}).copy()
+
+    @property
+    def train_loss(self):
+        return self.history.get('train_loss_epoch', self.history.get('train_loss', []))
+
+    @property
+    def valid_loss(self):
+        return self.history.get('valid_loss_epoch', self.history.get('valid_loss', []))
+
+    @property
+    def lr(self):
+        return self.history.get('learning_rate', [])
 
 def compute_group_metrics(Y, Y_hat):
     n_trials, _, n_units = Y.shape

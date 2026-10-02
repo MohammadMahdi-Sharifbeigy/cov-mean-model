@@ -648,16 +648,69 @@ def eval_mean_model(module):
 
 class History(L.Callback):
     def __init__(self):
-        self.train_loss_epoch = []
-        self.valid_loss_epoch = []
-        self.lr = []
+        super().__init__()
+        self.history = {}
 
-    def on_train_epoch_end(self, trainer, pl_module):
-        self.train_loss_epoch.append(trainer.callback_metrics["train_loss_epoch"].item())
+    def on_validation_epoch_end(self, trainer, pl_module):
+        if trainer.sanity_checking or trainer.global_rank != 0:
+            return
 
-    def on_validation_end(self, trainer, pl_module):
-        self.valid_loss_epoch.append(trainer.callback_metrics["valid_loss_epoch"].item())
-        self.lr.append(trainer.optimizers[0].param_groups[0]["lr"])
+        metrics = trainer.callback_metrics
+
+        if 'epoch' not in self.history:
+            self.history['epoch'] = []
+        self.history['epoch'].append(int(trainer.current_epoch))
+
+        # Safely extract learning rate
+        lr = float('nan')
+        if trainer.optimizers and len(trainer.optimizers[0].param_groups) > 0:
+            lr = trainer.optimizers[0].param_groups[0].get('lr', float('nan'))
+            
+        if 'learning_rate' not in self.history:
+            self.history['learning_rate'] = []
+        self.history['learning_rate'].append(float(lr))
+
+        current_len = len(self.history['epoch'])
+
+        # Store current metrics safely
+        for k, v in metrics.items():
+            try:
+                if hasattr(v, 'detach'):
+                    val = float(v.detach().cpu().item())
+                elif hasattr(v, 'item'):
+                    val = float(v.item())
+                else:
+                    val = float(v)
+            except Exception:
+                continue
+
+            if k not in self.history:
+                self.history[k] = [float('nan')] * (current_len - 1)
+            self.history[k].append(val)
+
+        # Pad any metrics that were not logged in the current epoch
+        for k, lst in self.history.items():
+            if k not in ['epoch', 'learning_rate']:
+                while len(lst) < current_len:
+                    lst.append(float('nan'))
+
+    def state_dict(self):
+        return {'history': self.history}
+
+    def load_state_dict(self, state_dict):
+        self.history = state_dict.get('history', {}).copy()
+
+    @property
+    def train_loss(self):
+        return self.history.get('train_loss_epoch', self.history.get('train_loss', []))
+
+    @property
+    def valid_loss(self):
+        return self.history.get('valid_loss_epoch', self.history.get('valid_loss', []))
+
+    @property
+    def lr(self):
+        return self.history.get('learning_rate', [])
 
 class LitModel(L.LightningModule):
     def __init__(self, Conf, mean_model, cov_model):

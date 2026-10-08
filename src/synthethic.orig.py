@@ -138,10 +138,10 @@ def generate_step1(prep: dict, noise: str = STEP1_NOISE, seed: int = SEED) -> np
 def generate_step2_poisson_binwise(
     prep: dict, seed: int = SEED
 ) -> np.ndarray:
-    """NB-C Step-2a: Poisson(μ[n,b]) synthetic target.
+    """NB-C Step-2a: Poisson(Î¼[n,b]) synthetic target.
 
-    Preserves the per-neuron, per-bin mean firing profile (μ[n,b] =
-    mean_t C[t,n,b]) — the event-locked PSTH — while destroying all
+    Preserves the per-neuron, per-bin mean firing profile (Î¼[n,b] =
+    mean_t C[t,n,b]) â€” the event-locked PSTH â€” while destroying all
     cross-trial shared fluctuations and all cross-neuron covariance.
     Each (trial, neuron, bin) cell is drawn i.i.d.
 
@@ -155,7 +155,7 @@ def generate_step2_poisson_binwise(
     structure. The binwise extension sharpens resolution to the
     temporal level.
 
-    Returns firing-rate units (counts × spike_scale), identical units
+    Returns firing-rate units (counts Ã— spike_scale), identical units
     to prep['Y_rate'], so the target flows unchanged into NeuralDataset
     and the Anscombe transform.
     """
@@ -163,7 +163,7 @@ def generate_step2_poisson_binwise(
     counts = prep["counts"]                   # (T, N, K) spike counts
     T, N, K = counts.shape
 
-    # μ[n, b]: per-neuron per-bin mean across trials — shape (1, N, K)
+    # Î¼[n, b]: per-neuron per-bin mean across trials â€” shape (1, N, K)
     mu_nb = counts.mean(axis=0, keepdims=True)  # broadcast over trials
 
     # Log zero-mean cells; they generate all-zero Poisson draws (correct).
@@ -172,11 +172,11 @@ def generate_step2_poisson_binwise(
         import warnings as _w
         _w.warn(
             f"generate_step2_poisson_binwise: {n_zero} (neuron,bin) "
-            "cells with μ=0; those entries will be 0 in the synthetic tensor.",
+            "cells with Î¼=0; those entries will be 0 in the synthetic tensor.",
             RuntimeWarning, stacklevel=2,
         )
 
-    # Vectorised draw: rng.poisson broadcasts (1,N,K) lambda → (T,N,K)
+    # Vectorised draw: rng.poisson broadcasts (1,N,K) lambda â†’ (T,N,K)
     synth = rng.poisson(
         lam=np.broadcast_to(mu_nb, (T, N, K))
     ).astype(float)
@@ -552,7 +552,7 @@ def generate_step7_beta_factor_cov(
     Step-7 null: Synthetic covariance built purely from GLM tuning coefficients.
     Contains ZERO real-data information in Sigma.
 
-    The covariance structure is derived from the **normalized** β-factor Gram matrix
+    The covariance structure is derived from the **normalized** Î²-factor Gram matrix
     (cosine similarity between neuron tuning vectors):
 
         B_norm_b = B_b / ||B_b||_2        # unit-length tuning vectors
@@ -560,42 +560,42 @@ def generate_step7_beta_factor_cov(
 
     KEY FIX vs raw B@B.T:
     - Raw B@B.T is dominated by the absolute magnitude of betas (firing rate scale)
-      → all-positive matrix, looks like Step 4 (no visible structure)
+      â†’ all-positive matrix, looks like Step 4 (no visible structure)
     - Normalized cosine similarity captures DIRECTION only, independent of magnitude
-      → entries span [-1, +1], directly encoding same/opposite/orthogonal tuning
+      â†’ entries span [-1, +1], directly encoding same/opposite/orthogonal tuning
 
     This produces the signed block structure matching the target image:
-      - neurons with same-direction tuning   → cos ≈ +1 → positive entry (blue blocks)
-      - neurons with opposite-direction tuning → cos ≈ -1 → negative entry (red blocks)
-      - neurons with orthogonal tuning        → cos ≈  0 → near-zero entry (white)
+      - neurons with same-direction tuning   â†’ cos â‰ˆ +1 â†’ positive entry (blue blocks)
+      - neurons with opposite-direction tuning â†’ cos â‰ˆ -1 â†’ negative entry (red blocks)
+      - neurons with orthogonal tuning        â†’ cos â‰ˆ  0 â†’ near-zero entry (white)
 
     Normalization guarantees the matrix is still PSD (it is the Gram matrix of
     real unit vectors) while allowing negative off-diagonal entries.
 
     Parameters
     ----------
-    prep        : dict   — dataset prep dict (needs 'counts', 'spike_scale')
-    betas       : ndarray (N, K, V+1) — GLM betas; step3 betas by default,
+    prep        : dict   â€” dataset prep dict (needs 'counts', 'spike_scale')
+    betas       : ndarray (N, K, V+1) â€” GLM betas; step3 betas by default,
                   pass step4 betas to include the hidden variable dimension
-    lambda_hat  : ndarray (T, N, K) — GLM predicted rates (same betas as above)
-    cov_mode    : str  — 'binwise' (separate Sigma per bin, recommended)
+    lambda_hat  : ndarray (T, N, K) â€” GLM predicted rates (same betas as above)
+    cov_mode    : str  â€” 'binwise' (separate Sigma per bin, recommended)
                          'global'  (average tuning across bins, single Sigma)
-    noise_scale : float — scalar multiplier on Sigma before sampling;
+    noise_scale : float â€” scalar multiplier on Sigma before sampling;
                   controls noise strength; 5.0 recommended (makes correlated
                   noise dominate Poisson noise so block structure is visible)
-    ridge       : float — added to Sigma diagonal for numerical PD guarantee
+    ridge       : float â€” added to Sigma diagonal for numerical PD guarantee
     seed        : int
-    sort_by_tuning : bool — if True, cluster neurons by their mean tuning
+    sort_by_tuning : bool â€” if True, cluster neurons by their mean tuning
                   direction (K-means on normalized mean beta vectors across bins)
                   and return (synth, sort_idx). The data itself is NOT reordered;
                   sort_idx is for visualization only (pass to plot calls).
-    n_clusters  : int — number of K-means clusters for tuning-based sort
+    n_clusters  : int â€” number of K-means clusters for tuning-based sort
 
     Pseudocode (per bin b, in 'binwise' mode)
     -----------------------------------------
     1.  B_b      = betas[:, b, 1:]                       # (N, V)  exclude intercept
     2.  B_norm_b = B_b / (||B_b||_row + eps)             # (N, V)  unit-length tuning vectors
-    3.  Gram     = B_norm_b @ B_norm_b.T                 # (N, N)  cosine similarity ∈ [-1,+1]
+    3.  Gram     = B_norm_b @ B_norm_b.T                 # (N, N)  cosine similarity âˆˆ [-1,+1]
     4.  Sigma_b  = Gram * noise_scale + ridge * I        # scale + numerical PD fix
     5.  Make PSD: eigendecompose, clip eigenvalues to ridge, reconstruct
     6.  noise_b  ~ MVN(0, Sigma_b),  size=T              # (T, N)  shared signed noise
@@ -607,9 +607,9 @@ def generate_step7_beta_factor_cov(
 
     Returns
     -------
-    synth     : ndarray (T, N, K) — synthetic firing rates (counts × spike_scale)
-                Neurons are in the ORIGINAL order (not sorted) — safe for training.
-    sort_idx  : ndarray (N,) — neuron indices that sort by tuning cluster
+    synth     : ndarray (T, N, K) â€” synthetic firing rates (counts Ã— spike_scale)
+                Neurons are in the ORIGINAL order (not sorted) â€” safe for training.
+    sort_idx  : ndarray (N,) â€” neuron indices that sort by tuning cluster
                 (only returned when sort_by_tuning=True). Use this to reorder
                 Y_synth and lambda_hat for visualization:
                     Y_sorted = synth[:, sort_idx, :]
@@ -629,7 +629,7 @@ def generate_step7_beta_factor_cov(
         B_mean = betas[:, :, 1:].mean(axis=1)                            # (N, V)
         norms  = np.linalg.norm(B_mean, axis=1, keepdims=True) + eps
         B_norm = B_mean / norms                                          # unit vectors
-        Gram   = B_norm @ B_norm.T                                       # (N, N) cosine sim ∈ [-1,+1]
+        Gram   = B_norm @ B_norm.T                                       # (N, N) cosine sim âˆˆ [-1,+1]
         Sigma  = Gram * noise_scale + ridge * I_N
         # Ensure PSD (cosine gram is PSD by construction; ridge makes it strictly PD)
         eigvals, eigvecs = np.linalg.eigh(Sigma)
@@ -644,7 +644,7 @@ def generate_step7_beta_factor_cov(
             B_b    = betas[:, b, 1:]                                     # (N, V)
             norms  = np.linalg.norm(B_b, axis=1, keepdims=True) + eps
             B_norm = B_b / norms                                         # (N, V) unit vectors
-            Gram   = B_norm @ B_norm.T                                   # (N, N) cosine sim ∈ [-1,+1]
+            Gram   = B_norm @ B_norm.T                                   # (N, N) cosine sim âˆˆ [-1,+1]
             Sigma_b = Gram * noise_scale + ridge * I_N
             # Ensure PSD (small clip for numerical stability)
             eigvals, eigvecs = np.linalg.eigh(Sigma_b)

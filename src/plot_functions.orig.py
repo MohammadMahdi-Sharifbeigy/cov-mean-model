@@ -259,7 +259,7 @@ def plot_mean_variance_comparison(Y_ref: np.ndarray, Y_test: np.ndarray, prep: d
     
     fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
     
-    # ── 1. Mean Firing Rate ──
+    # â”€â”€ 1. Mean Firing Rate â”€â”€
     axes[0].scatter(rate_ref, rate_test, alpha=0.8, edgecolors='w', linewidth=0.5, s=60)
     max_rate = max(rate_ref.max(), rate_test.max())
     axes[0].plot([0, max_rate * 1.05], [0, max_rate * 1.05], 'k--', lw=1.2, alpha=0.6)
@@ -267,7 +267,7 @@ def plot_mean_variance_comparison(Y_ref: np.ndarray, Y_test: np.ndarray, prep: d
     axes[0].set_ylabel(f'{label_test} Mean Firing Rate (Hz)', fontweight='bold')
     axes[0].set_title('Mean Firing Rate per Unit', pad=10)
     
-    # ── 2. Variance of Counts ──
+    # â”€â”€ 2. Variance of Counts â”€â”€
     axes[1].scatter(var_ref_counts, var_test_counts, alpha=0.8, edgecolors='w', linewidth=0.5, s=60, color='C1')
     max_var = max(var_ref_counts.max(), var_test_counts.max())
     axes[1].plot([0, max_var * 1.05], [0, max_var * 1.05], 'k--', lw=1.2, alpha=0.6)
@@ -670,7 +670,7 @@ def plot_step_boxplot(df_step: pd.DataFrame, step_name: str = 'Step', metric: st
         dir_name = os.path.dirname(save_path)
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
-        fig.savefig(save_path, bbox_inches='tight', dpi=300)
+        fig.savefig(save_path, bbox_inches='tight', dpi=150)
 
     if show:
         plt.show()
@@ -795,42 +795,11 @@ def plot_statistics_heatmap(
             adj_p_full[i, j] = adj_p_full[j, i]
 
     # Plotting
-    # The figure is kept compact (about 9 x 4.5 in for 5 models) so that the
-    # labels stay legible when it is scaled down onto a slide; resolution
-    # comes from the save dpi, not from a large canvas.
     tick_labels = [str(it).replace(' / ', '\n/ ') for it in items]
-    metric_name = {'pearson': 'Pearson r', 'r2': r'$R^2$', 'mse': 'MSE', 'nll': 'NLL'}.get(metric, metric)
-    cell_sz     = 0.75 if n <= 6 else max(0.45, 4.5 / n)
-    panel_sz    = cell_sz * n
-    fs_cell     = 13 if n <= 6 else max(7.0, 66.0 / n)
-    fs_tick, fs_label, fs_title, fs_sub = 9.5, 11.5, 12.5, 9.5
+    cell_sz     = max(1.6, 6.0 / n)
+    fig_sz      = cell_sz * n + 2.5
 
-    fig, axes = plt.subplots(
-        1, 2, figsize=(2 * panel_sz + 2.0, panel_sz + 1.25), layout="constrained"
-    )
-
-    def _style_axis(ax, show_ylabel):
-        ax.set_xticks(range(n)); ax.set_xticklabels(tick_labels, fontsize=fs_tick)
-        # row labels only on the left panel: both panels share the same order
-        ax.set_yticks(range(n))
-        ax.set_yticklabels(tick_labels if show_ylabel else [], fontsize=fs_tick)
-        ax.tick_params(length=0, pad=3)
-        ax.set_xlabel("Model B (column)", fontsize=fs_label)
-        if show_ylabel:
-            ax.set_ylabel("Model A (row)", fontsize=fs_label)
-        # thin white grid between cells
-        ax.set_xticks(np.arange(-0.5, n, 1), minor=True)
-        ax.set_yticks(np.arange(-0.5, n, 1), minor=True)
-        ax.grid(which="minor", color="white", lw=1.2)
-        ax.tick_params(which="minor", length=0)
-
-    def _panel_title(ax, title, subtitle):
-        ax.set_title(subtitle, fontsize=fs_sub, color="#374151", pad=5)
-        # bold headline sits just above the (one- or two-line) subtitle
-        n_sub = subtitle.count("\n") + 1
-        ax.annotate(title, xy=(0.5, 1.0), xycoords="axes fraction",
-                    xytext=(0, n_sub * fs_sub * 1.3 + 10), textcoords="offset points",
-                    ha="center", va="bottom", fontsize=fs_title, fontweight="bold")
+    fig, axes = plt.subplots(1, 2, figsize=(fig_sz * 2.1, fig_sz), layout="constrained")
 
     # Panel 0: Significance Matrix (Red = Significant via RdYlGn)
     disp_comb = np.where(np.eye(n, dtype=bool), np.nan, raw_p)
@@ -838,79 +807,70 @@ def plot_statistics_heatmap(
         for j in range(i + 1, n):
             disp_comb[i, j] = adj_p_full[i, j]
 
-    im0 = axes[0].imshow(disp_comb, cmap="RdYlGn", vmin=0, vmax=alpha * 2, aspect="equal")
+    im0 = axes[0].imshow(disp_comb, cmap="RdYlGn", vmin=0, vmax=alpha * 2, aspect="auto")
 
     for i in range(n):
         for j in range(n):
             if i == j:
-                axes[0].add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, color="#E5E7EB", zorder=2))
-                axes[0].text(j, i, "Ref", ha="center", va="center", fontsize=fs_cell,
-                             color="black", zorder=3, fontweight="bold")
+                axes[0].add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, color="#EBEBEB", zorder=2))
+                axes[0].text(j, i, "Ref", ha="center", va="center", fontsize=8.5, color="black", zorder=3, fontweight="bold")
             elif np.isnan(disp_comb[i, j]):
                 axes[0].add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, color="#F3F4F6", zorder=2))
-                axes[0].text(j, i, "n.d.", ha="center", va="center", fontsize=fs_cell - 1,
-                             color="#6B7280", zorder=3)
+                axes[0].text(j, i, "n.d.", ha="center", va="center", fontsize=8.0, color="#6B7280", zorder=3)
             else:
                 p_val = disp_comb[i, j]
                 stars = p_to_stars(p_val)
-                p_txt = "<0.001" if p_val < 0.001 else f"{p_val:.3f}"
-                col = "white" if (p_val < alpha / 2 or p_val > alpha * 1.6) else "black"
-                axes[0].text(j, i, f"{p_txt}\n{stars}", ha="center", va="center",
-                             fontsize=fs_cell, color=col, zorder=3, linespacing=0.95)
+                txt = f"{p_val:.2e}\n{stars}" if p_val < 0.001 else f"{p_val:.3f}\n{stars}"
+                col = "white" if p_val < alpha / 2 else "black"
+                axes[0].text(j, i, txt, ha="center", va="center", fontsize=7.5, color=col, zorder=3)
 
-    _style_axis(axes[0], show_ylabel=True)
-    thr_txt = "" if thresh_val is None else rf"   n.d.: $|\Delta|$ < {thresh_val}"
-    _panel_title(
-        axes[0],
-        f"Significance: {metric_name} ({filter_val})",
-        f"lower: raw Wilcoxon p   |   upper: {correction or 'uncorrected'} adjusted\n"
-        f"* p<0.05   ** p<0.01   *** p<0.001{thr_txt}",
+    axes[0].set_xticks(range(n)); axes[0].set_xticklabels(tick_labels, fontsize=8)
+    axes[0].set_yticks(range(n)); axes[0].set_yticklabels(tick_labels, fontsize=8)
+    axes[0].set_title(
+        f"Statistical Significance ({metric.upper()}, {filter_val})\n"
+        f"Lower tri = raw Wilcoxon  |  Upper tri = {correction or 'uncorrected'}\n"
+        f"(* p<0.05, ** p<0.01, *** p<0.001 | Ignored: |Î”| < {thresh_val})",
+        fontsize=9.5, fontweight="bold"
     )
-    cb0 = fig.colorbar(im0, ax=axes[0], shrink=0.85, pad=0.02)
-    cb0.set_label("p-value (red = significant)", fontsize=fs_label - 1)
-    cb0.ax.tick_params(labelsize=fs_tick - 1)
-    cb0.ax.axhline(alpha, color="red", lw=1.8, ls="--")
+    axes[0].set_xlabel("Model B (column)")
+    axes[0].set_ylabel("Model A (row)")
+    cb0 = fig.colorbar(im0, ax=axes[0], shrink=0.6, label="p-value (Red = Significant)")
+    cb0.ax.axhline(alpha, color="red", lw=1.5, ls="--")
 
-    # Panel 1: paired mean difference (row - column).
-    # Numbers are the raw difference; colour encodes who is better
-    # (blue = row model better), so it reads the same for error metrics
-    # (MSE, NLL: lower is better) and score metrics (Pearson, R2).
-    sign    = 1.0 if higher_is_better else -1.0
-    eff_max = float(np.nanmax(np.abs(eff))) if np.isfinite(eff).any() else 0.0
-    vlim    = eff_max if eff_max > 0 else 1.0
-    im1 = axes[1].imshow(sign * eff, cmap="RdBu", vmin=-vlim, vmax=vlim, aspect="equal")
+    # Panel 1: Cliff's Delta Effect-Size Matrix
+    im1 = axes[1].imshow(eff, cmap="RdBu", vmin=-1.0, vmax=1.0, aspect="auto")
     for i in range(n):
         for j in range(n):
             if i == j:
-                axes[1].add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, color="#E5E7EB", zorder=2))
-                axes[1].text(j, i, "Ref", ha="center", va="center", fontsize=fs_cell,
-                             color="black", zorder=3, fontweight="bold")
+                txt = "â€”"
+                col = "black"
             else:
-                v = eff[i, j]
-                txt = "0" if v == 0 else (f"{v:+.2f}" if abs(v) >= 0.095 else f"{v:+.3f}")
-                col = "white" if abs(v) > 0.6 * vlim else "black"
-                axes[1].text(j, i, txt, ha="center", va="center", fontsize=fs_cell, color=col, zorder=3)
+                txt = f"{eff[i,j]:.2f}"
+                col = "white" if abs(eff[i, j]) > 0.5 else "black"
+            axes[1].text(j, i, txt, ha="center", va="center", fontsize=8, color=col)
 
-    _style_axis(axes[1], show_ylabel=False)
-    better = "higher" if higher_is_better else "lower"
-    _panel_title(
-        axes[1],
-        rf"Effect size: $\Delta$ {metric_name} (row $-$ column)",
-        f"paired mean difference across units\n{better} {metric_name} is better   |   blue = row model better",
+    axes[1].set_xticks(range(n)); axes[1].set_xticklabels(tick_labels, fontsize=8)
+    axes[1].set_yticks(range(n)); axes[1].set_yticklabels(tick_labels, fontsize=8)
+    axes[1].set_title(
+        f"Effect Size ({metric.upper()})\n"
+        f"Paired Mean Difference (Î” {metric.upper()})\n"
+        f"(>0 = Row better | <0 = Col better)",
+        fontsize=9.5, fontweight="bold"
     )
-    cb1 = fig.colorbar(im1, ax=axes[1], shrink=0.85, pad=0.02)
-    cb1.set_label("advantage of row model", fontsize=fs_label - 1)
-    cb1.ax.tick_params(labelsize=fs_tick - 1)
+    axes[1].set_xlabel("Model B (column)")
+    fig.colorbar(im1, ax=axes[1], shrink=0.6, label="mean_diff")
 
-    for ax in axes:
-        for sp in ax.spines.values():
-            sp.set_visible(False)
+    fig.suptitle(
+        f"Pairwise Statistical Comparison [Wilcoxon] â€” {filter_col}={filter_val!r}",
+        fontsize=12, fontweight="bold"
+    )
+    sns.despine(fig=fig, left=True, bottom=True)
 
     if save_path:
         dir_name = os.path.dirname(save_path)
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
-        fig.savefig(save_path, bbox_inches='tight', dpi=300)
+        fig.savefig(save_path, bbox_inches='tight', dpi=150)
         print(f"Saved -> {save_path}")
     plt.close(fig)
     return fig

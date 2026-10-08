@@ -600,10 +600,11 @@ def plot_step_boxplot(df_step: pd.DataFrame, step_name: str = 'Step', metric: st
     else:
         top_min, top_max = 0, 1
         
-    metric_display = metric.upper() if metric in ['nll', 'mse', 'r2'] else metric.capitalize()
+    metric_display = {'pearson_pooled': 'Pearson r (across trials)'}.get(
+        metric, metric.upper() if metric in ['nll', 'mse', 'r2'] else metric.capitalize())
     
     # 2. If there is a massive gap between 0 and the real models, split the axis!
-    if top_min > 0.05 and metric in ['pearson', 'r2']:
+    if top_min > 0.05 and metric in ['pearson', 'pearson_pooled', 'r2']:
         fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(6, 5.5), 
                                        gridspec_kw={'height_ratios': [3, 1]})
         
@@ -615,7 +616,7 @@ def plot_step_boxplot(df_step: pd.DataFrame, step_name: str = 'Step', metric: st
             sns.stripplot(data=df_step, x='model_label', y=metric, hue='model_label', order=models,
                           palette=palette_dict, size=7, alpha=0.8, jitter=True, edgecolor='white',
                           linewidth=0.6, ax=ax, legend=False)
-            if metric in ['pearson', 'r2']:
+            if metric in ['pearson', 'pearson_pooled', 'r2']:
                 ax.axhline(0, color='k', ls='--', lw=1.0, alpha=0.5)
                 
         # Zoom ax1 (top) to the real models, and ax2 (bottom) to the zero baseline
@@ -656,7 +657,7 @@ def plot_step_boxplot(df_step: pd.DataFrame, step_name: str = 'Step', metric: st
         sns.stripplot(data=df_step, x='model_label', y=metric, hue='model_label', order=models,
                       palette=palette_dict, size=7, alpha=0.8, jitter=True, edgecolor='white',
                       linewidth=0.6, ax=ax, legend=False)
-        if metric in ['pearson', 'r2']:
+        if metric in ['pearson', 'pearson_pooled', 'r2']:
             ax.axhline(0, color='k', ls='--', lw=1.0, alpha=0.5)
         ax.set_xlabel('')
         ax.set_xticks(range(len(models)))
@@ -727,7 +728,7 @@ def plot_statistics_heatmap(
     higher_is_better = {'pearson': True, 'r2': True, 'mse': False, 'nll': False}.get(metric, True)
 
     if magnitude_threshold == 'auto':
-        THRESHOLDS = {'pearson': 0.015, 'r2': 0.01, 'mse': 0.01, 'nll': 0.01}
+        THRESHOLDS = {'pearson': 0.015, 'pearson_pooled': 0.015, 'r2': 0.01, 'mse': 0.01, 'nll': 0.01}
         thresh_val = THRESHOLDS.get(metric, 0.01)
     else:
         thresh_val = magnitude_threshold
@@ -800,7 +801,9 @@ def plot_statistics_heatmap(
     # labels stay legible when it is scaled down onto a slide; resolution
     # comes from the save dpi, not from a large canvas.
     tick_labels = [str(it).replace(' / ', '\n/ ') for it in items]
-    metric_name = {'pearson': 'Pearson r', 'r2': r'$R^2$', 'mse': 'MSE', 'nll': 'NLL'}.get(metric, metric)
+    # keep these short: a long name widens the headline and squeezes the panels
+    metric_name = {'pearson': 'Pearson r', 'pearson_pooled': 'across-trial r',
+                   'r2': r'$R^2$', 'mse': 'MSE', 'nll': 'NLL'}.get(metric, metric)
     cell_sz     = 0.75 if n <= 6 else max(0.45, 4.5 / n)
     panel_sz    = cell_sz * n
     fs_cell     = 13 if n <= 6 else max(7.0, 66.0 / n)
@@ -825,13 +828,21 @@ def plot_statistics_heatmap(
         ax.grid(which="minor", color="white", lw=1.2)
         ax.tick_params(which="minor", length=0)
 
+    headlines = []
+
     def _panel_title(ax, title, subtitle):
         ax.set_title(subtitle, fontsize=fs_sub, color="#374151", pad=5)
         # bold headline sits just above the (one- or two-line) subtitle
         n_sub = subtitle.count("\n") + 1
-        ax.annotate(title, xy=(0.5, 1.0), xycoords="axes fraction",
-                    xytext=(0, n_sub * fs_sub * 1.3 + 10), textcoords="offset points",
-                    ha="center", va="bottom", fontsize=fs_title, fontweight="bold")
+        head = ax.annotate(title, xy=(0.5, 1.0), xycoords="axes fraction",
+                           xytext=(0, n_sub * fs_sub * 1.3 + 10), textcoords="offset points",
+                           ha="center", va="bottom", fontsize=fs_title, fontweight="bold")
+        # Keep the headline out of the layout solver: a long metric name must
+        # never squeeze the panels. Its room is reserved by the blank suptitle.
+        head.set_in_layout(False)
+        headlines.append((ax, head))
+
+    fig.suptitle(" ", fontsize=fs_title * 1.25)
 
     # Panel 0: Significance Matrix (Red = Significant via RdYlGn)
     disp_comb = np.where(np.eye(n, dtype=bool), np.nan, raw_p)
@@ -907,11 +918,26 @@ def plot_statistics_heatmap(
         for sp in ax.spines.values():
             sp.set_visible(False)
 
+    # Shrink any headline that is wider than its panel (plus colourbar) so the
+    # two headlines can never run into each other or off the figure.
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    for ax, head in headlines:
+        limit = ax.get_window_extent(renderer).width * 1.22
+        width = head.get_window_extent(renderer).width
+        if width > limit:
+            head.set_fontsize(max(7.0, head.get_fontsize() * limit / width))
+        sub_width = ax.title.get_window_extent(renderer).width
+        sub_limit = ax.get_window_extent(renderer).width * 1.02   # must clear the colourbar
+        if sub_width > sub_limit:
+            ax.title.set_fontsize(max(6.0, ax.title.get_fontsize() * sub_limit / sub_width))
+
     if save_path:
         dir_name = os.path.dirname(save_path)
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
-        fig.savefig(save_path, bbox_inches='tight', dpi=300)
+        fig.savefig(save_path, bbox_inches='tight', dpi=300,
+                    bbox_extra_artists=[head for _, head in headlines])
         print(f"Saved -> {save_path}")
     plt.close(fig)
     return fig

@@ -40,7 +40,7 @@ _COND_HUE = {
 "step2b": "#D62828", # crimson
 "step3": "#8AC926", # apple green
 "step3b": "#FFCA3A", # warm gold
-"step4": "#118AB2", # ocean blue
+"step4": "#4361EE", # royal blue (changed to contrast with teal and pink)
 "step5": "#EF476F", # rose pink
 "step6": "#7209B7", # Deep Violet - very distinctive and fits the theme
 "step7": "#06D6A0", # Emerald green - beta-factor synthetic covariance
@@ -221,6 +221,69 @@ def filter_task_vars(prep, selected_vars=None):
         
     return X_dense, X_sparse
 
+def plot_firing_rate_histogram(Y_real, Y_test, test_label='step3a (Poisson)', save_path=None):
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ax.hist(np.asarray(Y_real).ravel(), bins=40, alpha=0.6, label='real', density=True)
+    ax.hist(np.asarray(Y_test).ravel(), bins=40, alpha=0.6, label=test_label, density=True)
+    ax.set_xlabel('Firing rate')
+    ax.set_ylabel('Density')
+    ax.set_title(f'Real vs {test_label}')
+    ax.legend(frameon=False)
+    sns.despine(ax=ax)
+    plt.tight_layout()
+    if save_path:
+        fig.savefig(save_path, bbox_inches='tight', dpi=150)
+    plt.show()
+    return fig
+
+def plot_mean_variance_comparison(Y_ref: np.ndarray, Y_test: np.ndarray, prep: dict,
+                                  label_ref: str = 'Real', label_test: str = 'Synthetic',
+                                  save_path: str = None):
+    """Compares the mean firing rate and variance per unit between two datasets."""
+    set_pub_style()
+    
+    # Convert rates back to raw counts for accurate variance calculation
+    counts_ref = Y_ref / prep['spike_scale']
+    counts_test = Y_test / prep['spike_scale']
+    
+    # Calculate means and variances in count space
+    mu_ref_counts = counts_ref.mean(axis=(0, 2))
+    var_ref_counts = counts_ref.var(axis=(0, 2))
+    
+    mu_test_counts = counts_test.mean(axis=(0, 2))
+    var_test_counts = counts_test.var(axis=(0, 2))
+    
+    # Convert mean counts back to Hz for the first panel
+    rate_ref = mu_ref_counts / prep['spike_scale']
+    rate_test = mu_test_counts / prep['spike_scale']
+    
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
+    
+    # â”€â”€ 1. Mean Firing Rate â”€â”€
+    axes[0].scatter(rate_ref, rate_test, alpha=0.8, edgecolors='w', linewidth=0.5, s=60)
+    max_rate = max(rate_ref.max(), rate_test.max())
+    axes[0].plot([0, max_rate * 1.05], [0, max_rate * 1.05], 'k--', lw=1.2, alpha=0.6)
+    axes[0].set_xlabel(f'{label_ref} Mean Firing Rate (Hz)', fontweight='bold')
+    axes[0].set_ylabel(f'{label_test} Mean Firing Rate (Hz)', fontweight='bold')
+    axes[0].set_title('Mean Firing Rate per Unit', pad=10)
+    
+    # â”€â”€ 2. Variance of Counts â”€â”€
+    axes[1].scatter(var_ref_counts, var_test_counts, alpha=0.8, edgecolors='w', linewidth=0.5, s=60, color='C1')
+    max_var = max(var_ref_counts.max(), var_test_counts.max())
+    axes[1].plot([0, max_var * 1.05], [0, max_var * 1.05], 'k--', lw=1.2, alpha=0.6)
+    axes[1].set_xlabel(f'{label_ref} Variance (Spike Counts)', fontweight='bold')
+    axes[1].set_ylabel(f'{label_test} Variance (Spike Counts)', fontweight='bold')
+    axes[1].set_title('Variance of Spike Counts per Unit', pad=10)
+    
+    sns.despine()
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=150)
+        
+    plt.show()
+    return fig
+
 def plot_population_raster(
     conditions: dict,
     prep: dict,
@@ -396,10 +459,14 @@ def plot_psth_traces(
     psth = {lab: _psth(np.asarray(conditions[lab])) for lab in labels}
     ymax = max(psth[l][0][show].max() for l in labels)
 
-    fig, axes = plt.subplots(1, len(show), figsize=(3.0 * len(show), 3.2),
+    cols = min(2, len(show))
+    rows = math.ceil(len(show) / cols) if len(show) > 0 else 1
+
+    fig, axes = plt.subplots(rows, cols, figsize=(3.5 * cols, 2.8 * rows),
                               sharey=True, squeeze=False)
     
-    for ax, u in zip(axes[0], show):
+    ax_flat = axes.flatten()
+    for ax, u in zip(ax_flat, show):
         for lab in labels:
             mean, sem = psth[lab]
             lw = 2.2 if lab == "real" else 1.4
@@ -413,14 +480,19 @@ def plot_psth_traces(
         ax.set_yticks([])
         sns.despine(ax=ax, left=True)
 
-    ax0 = axes[0][0]
+    # Hide unused axes
+    for ax in ax_flat[len(show):]:
+        ax.set_visible(False)
+
+    ax0 = ax_flat[0]
     step = max(1.0, round(ymax / 3))
     x0 = t[0]
     ax0.plot([x0, x0], [0, step], color="k", lw=2.5, clip_on=False)
     ax0.text(x0 - (t[-1] - t[0]) * 0.02, step / 2, f"{step:.0f} Hz",
              rotation=90, ha="right", va="center", fontsize=8)
     
-    axes[0][-1].legend(loc="upper right", fontsize=8, frameon=False)
+    if len(show) > 0:
+        ax_flat[len(show) - 1].legend(loc="upper right", fontsize=8, frameon=False)
     fig.suptitle(title, y=1.03, fontweight="bold")
     plt.tight_layout()
     

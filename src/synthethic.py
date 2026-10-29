@@ -728,23 +728,33 @@ def generate_step7_kronecker_poisson(
 
 
 def generate_positive_control_shared_scalar(
-    n_trials, n_channels, n_bins, sigma_eps=1.0, seed=SEED
+    n_trials, n_channels, n_bins, sigma_eps=1.0, sigma_noise=1.0, offset=10.0, seed=SEED
 ):
     """Positive-control synthetic dataset.
 
     For each trial, draw a single scalar epsilon_t ~ N(0, sigma_eps^2) and
-    broadcast it identically to every (channel, bin) entry of that trial.
-    All other structure is zero.  The resulting covariance is rank-1 with an
-    all-ones correlation matrix — a closed-form ground truth for testing
-    factor-analytic identifiability of SharedCovModel.
+    broadcast it identically to every (channel, bin) entry of that trial,
+    plus independent noise xi ~ N(0, sigma_noise^2) per entry.
+
+    The data are built in the model's Anscombe space,
+        Z = offset + epsilon_t + xi,
+    and mapped back with the inverse Anscombe transform, so the pipeline's
+    Anscombe step recovers Z exactly.  (Feeding Gaussian values directly
+    gives negative inputs to sqrt(y + 3/8), i.e. NaN targets.)  The
+    independent noise matches the identity term that SharedCovModel always
+    adds to its covariance.  The closed-form ground truth in Anscombe space is
+        Sigma_true = sigma_eps^2 * 1 1^T + sigma_noise^2 * I
+    (rank-1 shared factor plus diagonal).
 
     Returns
     -------
-    Y       : ndarray (n_trials, n_channels, n_bins)
+    Y       : ndarray (n_trials, n_channels, n_bins)  — count-space values
     epsilon : ndarray (n_trials,)  — drawn scalar per trial (for verification)
     """
     rng = np.random.default_rng(seed)
     epsilon = rng.normal(loc=0.0, scale=sigma_eps, size=(n_trials,))
-    Y = np.zeros((n_trials, n_channels, n_bins))
-    Y = Y + epsilon[:, None, None]   # broadcast to all (channel, bin)
+    xi = rng.normal(loc=0.0, scale=sigma_noise, size=(n_trials, n_channels, n_bins))
+    Z = offset + epsilon[:, None, None] + xi   # broadcast epsilon to all (channel, bin)
+    assert np.all(Z > 0), "offset too small: Anscombe-space values must be positive"
+    Y = (Z / 2.0) ** 2 - 3.0 / 8.0             # inverse Anscombe
     return Y, epsilon

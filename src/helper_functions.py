@@ -347,6 +347,8 @@ def compute_shap_values(Conf, lit_model, background_dataset, explain_dataset, n_
     n_units = Conf.data.n_units
     n_vars = Conf.data.n_vars
     n_states = n_vars + 1
+    position_end = Conf.data.n_position_vars
+    dense_end = position_end + Conf.data.n_dense_vars
     n_background_trials = len(background_dataset)
     n_explain_trials = len(explain_dataset)
 
@@ -369,9 +371,9 @@ def compute_shap_values(Conf, lit_model, background_dataset, explain_dataset, n_
 
             background_idx = torch.randint(n_background_trials, (n_permutations,), device=device, generator=shap_generator)
 
-            position = torch.where(included[:, :, None, :4], explain[0][[explain_trial_idx], None, :, :].clone(), background[0][background_idx, None, :, :].clone())
-            dense = torch.where(included[:, :, 4:7], explain[1][[explain_trial_idx], None, :].clone(), background[1][background_idx, None, :].clone())
-            sparse = torch.where(included[:, :, 7:], explain[2][[explain_trial_idx], None, :].clone(), background[2][background_idx, None, :].clone())
+            position = torch.where(included[:, :, None, :position_end], explain[0][[explain_trial_idx], None, :, :].clone(), background[0][background_idx, None, :, :].clone())
+            dense = torch.where(included[:, :, position_end:dense_end], explain[1][[explain_trial_idx], None, :].clone(), background[1][background_idx, None, :].clone())
+            sparse = torch.where(included[:, :, dense_end:], explain[2][[explain_trial_idx], None, :].clone(), background[2][background_idx, None, :].clone())
 
             outputs = mean_model((position.flatten(0, 1), dense.flatten(0, 1), sparse.flatten(0, 1))).reshape(n_permutations, n_states, n_bins, n_units)
 

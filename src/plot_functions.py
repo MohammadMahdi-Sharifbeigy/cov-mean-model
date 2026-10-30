@@ -2725,7 +2725,8 @@ def plot_model_metric_improvement(
         better_mse.append(np.nanmean(mse_m) < np.nanmean(mse_b))
 
     def get_proportions(pvals, is_better):
-        sig = sum(1 for p, better in zip(pvals, is_better) if p < alpha and better)
+        reject = multipletests(np.nan_to_num(pvals, nan=1.0), alpha=alpha, method="fdr_bh")[0]
+        sig = sum(1 for rejected, better in zip(reject, is_better) if rejected and better)
         total = len(pvals)
         return sig / total, (total - sig) / total
 

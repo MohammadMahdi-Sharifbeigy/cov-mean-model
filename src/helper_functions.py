@@ -437,6 +437,15 @@ compute_r2 = lambda y, y_hat: (
 compute_mse = lambda y, y_hat: np.mean((y - y_hat) ** 2)
 
 
+def compute_pooled_r2(Y, Y_hat):
+    # One R^2 per unit over all trials and bins together, so trial-to-trial differences count (Y: trials, bins, units)
+    y = np.asarray(Y, dtype=float).reshape(-1, Y.shape[-1])
+    y_hat = np.asarray(Y_hat, dtype=float).reshape(-1, Y.shape[-1])
+    residual = np.sum((y - y_hat) ** 2, axis=0)
+    total = np.sum((y - y.mean(axis=0)) ** 2, axis=0)
+    return 1 - residual / np.where(total > 1e-3, total, np.nan)
+
+
 def compute_metrics(Conf, Y, Y_hat):
     n_units = Conf.data.n_units
 

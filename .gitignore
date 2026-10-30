@@ -2,4 +2,4 @@ checkpoints/
 env/
 cache/
 metrics_csv/
-step6a_extraction_checkpoint.npz
+step5a_extraction_checkpoint.npz

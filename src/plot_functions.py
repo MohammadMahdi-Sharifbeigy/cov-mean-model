@@ -41,9 +41,8 @@ _COND_HUE = {
 "step3": "#8AC926", # apple green
 "step3b": "#FFCA3A", # warm gold
 "step4": "#4361EE", # royal blue (changed to contrast with teal and pink)
-"step5": "#EF476F", # rose pink
-"step6": "#7209B7", # Deep Violet - very distinctive and fits the theme
-"step7": "#06D6A0", # Emerald green - beta-factor synthetic covariance
+"step5": "#7209B7", # Deep Violet - very distinctive and fits the theme
+"step6": "#06D6A0", # Emerald green - beta-factor synthetic covariance
 }
 
 def save_figure(fig, file_name, file_path, ext=".png", transparent=False, **savefig_kwargs):

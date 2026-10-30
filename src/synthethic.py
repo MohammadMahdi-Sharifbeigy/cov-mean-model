@@ -273,80 +273,8 @@ def generate_step4_random_latent_bias(prep, lambda_hat, n_latents=3, latent_stre
     synth = rng.poisson(lam=modulated_lambda).astype(float)
     return synth * prep.get('spike_scale', 1.0)
 
-def generate_step5_shared_noise(prep, lambda_hat, cov_type='global', n_blocks=4, seed=SEED, noise_scale=1.0, **kwargs):
-    """
-    Step-5 null: Adds synthetic shared noise sampled from the empirical noise 
-    correlation (residual covariance) matrix.
-    
-    cov_type options:
-      - 'global': A single N x N covariance matrix across all bins and trials.
-      - 'binwise': K different N x N covariance matrices (one for each bin).
-      - 'structured': A block-structured N x N covariance matrix (random boxes).
-    """
-    rng = np.random.default_rng(seed)
-    
-    Y_true = prep['counts']
-    T, N, K = Y_true.shape
-    
-    eps = 1e-8
-    # residuals: (T, N, K)
-    residuals = (Y_true - lambda_hat) / np.sqrt(lambda_hat + eps)
-    
-    synth_noise = np.zeros_like(residuals)
-    
-    if cov_type == 'global':
-        # Compute covariance across T and K
-        res_flat = residuals.transpose(0, 2, 1).reshape(T * K, N) # (T*K, N)
-        Sigma = np.cov(res_flat, rowvar=False) # (N, N)
-        
-        # Sample noise
-        noise_flat = rng.multivariate_normal(mean=np.zeros(N), cov=Sigma * noise_scale, size=T * K)
-        synth_noise = noise_flat.reshape(T, K, N).transpose(0, 2, 1)
-        
-    elif cov_type == 'binwise':
-        # Compute covariance for each bin separately
-        for k in range(K):
-            res_k = residuals[:, :, k] # (T, N)
-            Sigma_k = np.cov(res_k, rowvar=False) # (N, N)
-            
-            # Sample noise for this bin
-            synth_noise[:, :, k] = rng.multivariate_normal(mean=np.zeros(N), cov=Sigma_k * noise_scale, size=T)
-            
-    elif cov_type == 'structured':
-        # Compute global covariance first
-        res_flat = residuals.transpose(0, 2, 1).reshape(T * K, N)
-        Sigma = np.cov(res_flat, rowvar=False) # (N, N)
-        
-        # Create a block-diagonal mask or structured boxes
-        block_size = int(np.ceil(N / n_blocks))
-        Sigma_structured = np.zeros_like(Sigma)
-        
-        for i in range(n_blocks):
-            start = i * block_size
-            end = min((i + 1) * block_size, N)
-            if start < N:
-                Sigma_structured[start:end, start:end] = Sigma[start:end, start:end]
-            
-        # Ensure it's positive semi-definite
-        eigvals, eigvecs = np.linalg.eigh(Sigma_structured)
-        eigvals = np.clip(eigvals, 1e-8, None)
-        Sigma_structured = eigvecs @ np.diag(eigvals) @ eigvecs.T
-        
-        noise_flat = rng.multivariate_normal(mean=np.zeros(N), cov=Sigma_structured * noise_scale, size=T * K)
-        synth_noise = noise_flat.reshape(T, K, N).transpose(0, 2, 1)
-
-    # Add synthetic noise back to the predicted mean
-    new_lambda = lambda_hat + synth_noise * np.sqrt(lambda_hat + eps)
-    new_lambda = np.clip(new_lambda, 1e-8, 1000.0)
-    
-    synth = rng.poisson(lam=new_lambda).astype(float)
-    
-    if kwargs.get('return_noise', False):
-        return synth * prep.get('spike_scale', 1.0), synth_noise
-    return synth * prep.get('spike_scale', 1.0)
-
 # =========================================================================
-# Step 6a: Deep Mean Model Noise Correlation Extraction & Injection
+# Step 5a: Deep Mean Model Noise Correlation Extraction & Injection
 # =========================================================================
 import torch
 import numpy as np
@@ -354,7 +282,7 @@ import numpy as np
 def extract_empirical_covariance_from_deep_model(prep, Conf, device, x_position_vars):
     import os
     import numpy as np
-    checkpoint_file = 'step6a_extraction_checkpoint.npz'
+    checkpoint_file = 'step5a_extraction_checkpoint.npz'
     if os.path.exists(checkpoint_file):
         print(f"Loading cached extraction from {checkpoint_file} to save time...")
         data = np.load(checkpoint_file)
@@ -420,7 +348,7 @@ def extract_empirical_covariance_from_deep_model(prep, Conf, device, x_position_
     
     train_loader = DataLoader(dataset_real, batch_size=Conf.training.batch_size, shuffle=True)
     # Add the custom progress bar defined earlier in the notebook
-    progress_bar = EpochProgressBar(max_epochs=Conf.training.max_epoch, model_name="Deep Mean Model (Step 6a Extraction)")
+    progress_bar = EpochProgressBar(max_epochs=Conf.training.max_epoch, model_name="Deep Mean Model (Step 5a Extraction)")
     from lightning.pytorch.callbacks.early_stopping import EarlyStopping
     early_stop_callback = EarlyStopping(
         monitor='valid_loss_epoch',
@@ -475,7 +403,7 @@ def extract_empirical_covariance_from_deep_model(prep, Conf, device, x_position_
     np.savez(checkpoint_file, empirical_covs=empirical_covs, residuals_real=residuals)
     return empirical_covs, residuals
 
-def generate_step6_data(prep, empirical_covs, residuals_real, lambda_hat_step3, seed=SEED, return_noise=False):
+def generate_step5_data(prep, empirical_covs, residuals_real, lambda_hat_step3, seed=SEED, return_noise=False):
     """
     Injects empirical noise correlation into step 3 synthetic means.
     """
@@ -495,7 +423,7 @@ def generate_step6_data(prep, empirical_covs, residuals_real, lambda_hat_step3, 
     std_synth = np.std(synth_noise)
     
     scale_factor = std_real / (std_synth + 1e-8)
-    print(f"-> [Step 6] Variance Control Scale Factor: {scale_factor:.4f}")
+    print(f"-> [Step 5] Variance Control Scale Factor: {scale_factor:.4f}")
     
     synth_noise_scaled = synth_noise * scale_factor
     
@@ -537,7 +465,7 @@ def make_positive_definite(C, eps=1e-6):
 
     return C_pd
 
-def generate_step7_beta_factor_cov(
+def generate_step6_beta_factor_cov(
     prep,
     betas,
     lambda_hat,
@@ -549,7 +477,7 @@ def generate_step7_beta_factor_cov(
     n_clusters=5,
     ):
     """
-    Step-7 null: Synthetic covariance built purely from GLM tuning coefficients.
+    Step-6 null: Synthetic covariance built purely from GLM tuning coefficients.
     Contains ZERO real-data information in Sigma.
 
     The covariance structure is derived from the **normalized** β-factor Gram matrix
@@ -653,7 +581,7 @@ def generate_step7_beta_factor_cov(
             synth_noise[:, :, b] = rng.multivariate_normal(np.zeros(N), Sigma_b, size=T)
 
     else:
-        raise ValueError(f"generate_step7_beta_factor_cov: unknown cov_mode '{cov_mode}'. "
+        raise ValueError(f"generate_step6_beta_factor_cov: unknown cov_mode '{cov_mode}'. "
                          "Choose 'binwise' or 'global'.")
 
     # ---- inject noise proportionally into lambda (same formula as step5) ----
@@ -663,8 +591,8 @@ def generate_step7_beta_factor_cov(
     synth = rng.poisson(lam=new_lambda).astype(float)
 
     # ---- sanity checks ----
-    assert synth.shape == (T, N, K), f"step7 shape mismatch: {synth.shape}"
-    assert np.all(synth >= 0), "step7 contains negative values"
+    assert synth.shape == (T, N, K), f"step6 shape mismatch: {synth.shape}"
+    assert np.all(synth >= 0), "step6 contains negative values"
 
     synth_out = synth * prep.get('spike_scale', 1.0)
 
@@ -682,7 +610,7 @@ def generate_step7_beta_factor_cov(
 
     return synth_out
 
-def generate_step7_kronecker_poisson(
+def generate_step6_kronecker_poisson(
     lambda_hat,
     per_neuron_cov,   # (N, N)
     per_bin_cov,      # (B, B)
@@ -692,14 +620,14 @@ def generate_step7_kronecker_poisson(
     return_noise=False,
     ):
     """
-    Step 7c: Same Kronecker joint covariance as 7a,
+    Step 6c: Same Kronecker joint covariance as 6a,
     but with an added Poisson shot-noise layer on top.
     """
     rng = np.random.default_rng(seed)
     T, N, B = lambda_hat.shape
     eps = 1e-8
 
-    # 1. Build joint neuron-bin covariance (same as 7a)
+    # 1. Build joint neuron-bin covariance (same as 6a)
     hidden_cov_matrix = np.kron(per_neuron_cov, per_bin_cov)
     hidden_cov_matrix = make_positive_definite(hidden_cov_matrix, eps=ridge)
 
@@ -711,15 +639,15 @@ def generate_step7_kronecker_poisson(
     noise_flat = z @ L2.T
     eta = noise_flat.reshape(T, N, B)
 
-    # 4. Inject noise into the rate (same formula as 7a)
+    # 4. Inject noise into the rate (same formula as 6a)
     new_lambda = lambda_hat + eta * np.sqrt(lambda_hat + eps)
     new_lambda = np.clip(new_lambda, eps, 1000.0)
 
     # 5. Extra Poisson layer on top
     synth = rng.poisson(lam=new_lambda).astype(np.float32)
 
-    assert synth.shape == (T, N, B), f"step7 shape mismatch: {synth.shape}"
-    assert np.all(synth >= 0), "step7 contains negative values"
+    assert synth.shape == (T, N, B), f"step6 shape mismatch: {synth.shape}"
+    assert np.all(synth >= 0), "step6 contains negative values"
 
     synth_out = synth * spike_scale
     if return_noise:

@@ -588,6 +588,8 @@ def predict_loader_group_conditionings(Conf, lit_model, loader, Y_mean, group_na
         for source_group in group_names
     }
 
+    progress_bar = tqdm(total=len(loader.dataset), desc=f"Group conditioning ({baseline})")
+
     with torch.inference_mode():
         for x, y in loader:
             x = tuple(t.to(device, non_blocking=True) for t in x)
@@ -703,6 +705,8 @@ def predict_loader_group_conditionings(Conf, lit_model, loader, Y_mean, group_na
                                     target_idx,
                                 ] += cross_cov @ torch.linalg.solve(partial_cov, diff)
 
+                progress_bar.update(1)
+
             for target_group in group_names:
                 target_indices = group_indices[target_group]
 
@@ -724,6 +728,8 @@ def predict_loader_group_conditionings(Conf, lit_model, loader, Y_mean, group_na
                             + Y_mean[:, :, target_indices]
                         )
                     )
+
+    progress_bar.close()
 
     Y = {
         group_name: torch.cat(values).cpu().numpy()
